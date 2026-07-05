@@ -14,7 +14,7 @@
   "command_mode": "toggle",
   "action_mode": "volume",
   "target_process": "Spotify.exe",
-  "target_label": "Spotify.exe - Spotify (2552) - 100%",
+  "target_label": "Spotify.exe - Spotify (2552) - 25%",
   "dead_volume": 50.0,
   "alive_volume": 25.0,
   "lol_region": null,

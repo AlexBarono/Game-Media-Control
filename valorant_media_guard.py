@@ -17,14 +17,15 @@ from tkinter import messagebox, ttk
 from ctypes import wintypes
 
 
-APP_NAME = "Game Media Guard"
+APP_NAME = "Game Media Control"
 APP_VERSION = "1.3.0"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 README_PATH = os.path.join(APP_DIR, "README.md")
-BACKGROUND_GIF_PATH = os.path.join(APP_DIR, "Gangcord.gif")
+FALLBACK_BACKGROUND_PATH = os.path.join(APP_DIR, "Gangcord.gif")
 LOGO_PATH = os.path.join(APP_DIR, "logo der app.png")
 MAX_BACKGROUND_FRAMES = 1
+HEADER_HEIGHT = "10c"
 GITHUB_REPO = "AlexBarono/Valorant-Media-Control"
 GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO}"
 GITHUB_RELEASE_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
@@ -496,6 +497,37 @@ def save_config(data):
         json.dump(data, handle, indent=2)
 
 
+def is_replacement_header_image(file_name):
+    lower_name = file_name.lower()
+    return lower_name.endswith(".png") and "gif" in lower_name and "logo" not in lower_name
+
+
+def find_header_background_path():
+    candidates = []
+    try:
+        for file_name in os.listdir(APP_DIR):
+            if is_replacement_header_image(file_name):
+                path = os.path.join(APP_DIR, file_name)
+                candidates.append((os.path.getmtime(path), path))
+    except OSError:
+        pass
+
+    if candidates:
+        return max(candidates)[1]
+    return FALLBACK_BACKGROUND_PATH
+
+
+def update_file_names_from_source(source_root):
+    file_names = list(UPDATE_FILES)
+    try:
+        for file_name in os.listdir(source_root):
+            if is_replacement_header_image(file_name) and file_name not in file_names:
+                file_names.append(file_name)
+    except OSError:
+        pass
+    return file_names
+
+
 def run_git_command(*args, timeout=12):
     return subprocess.check_output(
         ["git", *args],
@@ -773,7 +805,7 @@ def download_and_apply_zip_update():
         source_root = roots[0]
 
         updated = []
-        for file_name in UPDATE_FILES:
+        for file_name in update_file_names_from_source(source_root):
             source_path = os.path.join(source_root, file_name)
             target_path = os.path.join(APP_DIR, file_name)
             if os.path.exists(source_path):
@@ -1192,15 +1224,22 @@ class App(tk.Tk):
                 self.logo_image = None
                 self.logo_header_image = None
 
-        if os.path.exists(BACKGROUND_GIF_PATH):
+        background_path = find_header_background_path()
+        if os.path.exists(background_path):
+            is_gif = background_path.lower().endswith(".gif")
             index = 0
             while index < MAX_BACKGROUND_FRAMES:
                 try:
-                    frame = tk.PhotoImage(file=BACKGROUND_GIF_PATH, format=f"gif -index {index}")
+                    if is_gif:
+                        frame = tk.PhotoImage(file=background_path, format=f"gif -index {index}")
+                    else:
+                        frame = tk.PhotoImage(file=background_path)
                 except tk.TclError:
                     break
                 self.background_frames.append(frame)
                 index += 1
+                if not is_gif:
+                    break
             if self.background_frames:
                 self.banner_image = self.background_frames[0]
 
@@ -1245,7 +1284,7 @@ class App(tk.Tk):
         self.build_readme_tab(readme_tab)
 
     def build_hero(self, parent):
-        self.hero_canvas = tk.Canvas(parent, height=160, highlightthickness=0, bd=0, bg="black")
+        self.hero_canvas = tk.Canvas(parent, height=HEADER_HEIGHT, highlightthickness=0, bd=0, bg="black")
         self.hero_canvas.grid(row=0, column=0, sticky="ew")
         self.update_button = ttk.Button(self.hero_canvas, textvariable=self.update_button_text_var, command=self.update_button_clicked)
         self.hero_canvas.bind("<Configure>", lambda _event: self.draw_hero())
@@ -1272,9 +1311,10 @@ class App(tk.Tk):
                 self.hero_cover_image = self.banner_image.zoom(zoom, zoom)
                 self.hero_cover_zoom = zoom
             image = self.hero_cover_image
+            image_y = int((height - image.height()) * 0.64)
             canvas.create_image(
                 (width - image.width()) // 2,
-                (height - image.height()) // 2,
+                image_y,
                 image=image,
                 anchor="nw",
             )

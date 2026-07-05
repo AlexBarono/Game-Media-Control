@@ -1,4 +1,4 @@
-# Game Media Guard
+# Game Media Control
 
 Kleines Windows-Tool mit drei Tabs:
 
@@ -43,7 +43,8 @@ Das Tool liest nur den Bildschirm und sendet normale Windows-Medientasten. Es gr
 - Wenn GitHub neuer ist, erscheint der Button `Jetzt aktualisieren`.
 - Das Update laedt ein ZIP von GitHub und ersetzt nur die Programmdateien; danach die App neu starten.
 - Git muss fuer normale Nutzer nicht installiert sein.
-- Das GIF `Gangcord.gif` wird im Fenster sichtbar angezeigt, `logo der app.png` wird als App-Logo genutzt.
+- Ein PNG-Ersatzbild mit `gif` im Dateinamen wird als Headerbild genutzt; `Gangcord.gif` bleibt nur Fallback.
+- `logo der app.png` wird als App-Logo genutzt.
 - Valorant und LoL speichern Bereich, Ziel, Modus und Lautstaerke getrennt.
 - Wenn die Erkennung wackelt, waehle einen kleineren, klareren Bereich.
 - Wenn dein Mediaplayer direkte `Play`/`Pause`-Befehle ignoriert, stelle in der App auf `Fallback: Medien-Toggle bei jedem Wechsel`.
