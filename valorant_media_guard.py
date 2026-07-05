@@ -1139,6 +1139,9 @@ class App(tk.Tk):
         super().__init__()
         self.title(APP_NAME)
         self.minsize(900, 760)
+        start_width = min(max(1100, int(self.winfo_screenwidth() * 0.72)), self.winfo_screenwidth() - 80)
+        start_height = min(max(940, int(self.winfo_screenheight() * 0.82)), self.winfo_screenheight() - 80)
+        self.geometry(f"{start_width}x{start_height}")
 
         self.config_data = load_config()
         self.events = queue.Queue()
