@@ -1158,6 +1158,8 @@ class App(tk.Tk):
         self.hero_canvas = None
         self.hero_update_window = None
         self.last_hero_height = None
+        self.root_frame = None
+        self.notebook = None
         self.update_available = False
         self.update_check_running = False
         self.manual_update_url = None
@@ -1263,14 +1265,17 @@ class App(tk.Tk):
 
     def build_ui(self):
         root = ttk.Frame(self)
+        self.root_frame = root
         root.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.94, relheight=0.92)
         root.columnconfigure(0, weight=1)
-        root.rowconfigure(1, weight=1)
+        root.rowconfigure(0, weight=1)
+        root.rowconfigure(1, weight=0)
 
         self.build_hero(root)
 
         notebook = ttk.Notebook(root)
-        notebook.grid(row=1, column=0, sticky="nsew", padx=18, pady=(12, 18))
+        self.notebook = notebook
+        notebook.grid(row=1, column=0, sticky="ew", padx=18, pady=(12, 18))
 
         valorant_tab = ttk.Frame(notebook, padding=12)
         lol_tab = ttk.Frame(notebook, padding=12)
@@ -1282,10 +1287,11 @@ class App(tk.Tk):
         self.build_valorant_tab(valorant_tab)
         self.build_lol_tab(lol_tab)
         self.build_readme_tab(readme_tab)
+        self.after_idle(self.resize_hero)
 
     def build_hero(self, parent):
         self.hero_canvas = tk.Canvas(parent, height=170, highlightthickness=0, bd=0, bg="black")
-        self.hero_canvas.grid(row=0, column=0, sticky="ew")
+        self.hero_canvas.grid(row=0, column=0, sticky="nsew")
         self.update_button = ttk.Button(self.hero_canvas, textvariable=self.update_button_text_var, command=self.update_button_clicked)
         self.hero_canvas.bind("<Configure>", lambda _event: self.draw_hero())
         self.bind("<Configure>", lambda _event: self.resize_hero())
@@ -1293,10 +1299,17 @@ class App(tk.Tk):
         self.draw_hero()
 
     def resize_hero(self):
-        if not self.hero_canvas:
+        if not self.hero_canvas or not self.root_frame or not self.notebook:
             return
-        window_height = max(self.winfo_height(), 1)
-        target_height = max(130, min(220, int(window_height * 0.18)))
+
+        root_height = self.root_frame.winfo_height()
+        if root_height <= 1:
+            root_height = int(max(self.winfo_height(), 1) * 0.92)
+
+        notebook_height = self.notebook.winfo_reqheight()
+        available = root_height - notebook_height - 30
+        max_height = self.banner_image.height() if self.banner_image else 360
+        target_height = max(100, min(max_height, available))
         if target_height != self.last_hero_height:
             self.last_hero_height = target_height
             self.hero_canvas.configure(height=target_height)
@@ -1311,17 +1324,8 @@ class App(tk.Tk):
         canvas.delete("all")
 
         if self.banner_image:
-            image_width = self.banner_image.width()
-            image_height = self.banner_image.height()
-            zoom = max(
-                1,
-                (width + image_width - 1) // image_width,
-                (height + image_height - 1) // image_height,
-            )
-            if self.hero_cover_zoom != zoom:
-                self.hero_cover_image = self.banner_image.zoom(zoom, zoom)
-                self.hero_cover_zoom = zoom
-            image = self.hero_cover_image
+            image = self.banner_image
+            self.hero_cover_zoom = 1
             image_y = int((height - image.height()) * 0.64)
             canvas.create_image(
                 (width - image.width()) // 2,
