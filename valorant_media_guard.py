@@ -19,7 +19,7 @@ from ctypes import wintypes
 
 
 APP_NAME = "Game Media Control"
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.3.2"
 
 
 def get_app_dir():
@@ -1002,6 +1002,21 @@ def find_dominant_red_color(raw_bgra, width, height):
     return color, count, total
 
 
+def capture_color_sample_at_point(screen_x, screen_y, sample_size=15):
+    virtual_x, virtual_y, virtual_w, virtual_h = get_virtual_screen()
+    half_size = max(1, sample_size // 2)
+    left = max(virtual_x, int(screen_x) - half_size)
+    top = max(virtual_y, int(screen_y) - half_size)
+    right = min(virtual_x + virtual_w, int(screen_x) + half_size + 1)
+    bottom = min(virtual_y + virtual_h, int(screen_y) + half_size + 1)
+    width = max(1, right - left)
+    height = max(1, bottom - top)
+
+    raw = capture_region(left, top, width, height)
+    target_rgb, target_pixels, total_pixels = find_dominant_red_color(raw, width, height)
+    return target_rgb, target_pixels, total_pixels
+
+
 def get_valorant_color_percent(raw_bgra, width, height, color_tolerance, target_rgb=None):
     total = width * height
     if total <= 0:
@@ -1227,6 +1242,44 @@ class RegionSelector(tk.Toplevel):
             return
 
         self.callback({"left": int(left), "top": int(top), "width": int(width), "height": int(height)})
+
+    def cancel(self):
+        self.destroy()
+        self.callback(None)
+
+
+class ColorSelector(tk.Toplevel):
+    def __init__(self, master, callback, prompt, accent="#ff4655"):
+        super().__init__(master)
+        self.callback = callback
+        self.prompt = prompt
+        self.accent = accent
+        self.virtual_x, self.virtual_y, self.virtual_w, self.virtual_h = get_virtual_screen()
+
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        self.attributes("-alpha", 0.28)
+        self.configure(bg="black")
+        self.geometry(f"{self.virtual_w}x{self.virtual_h}+{self.virtual_x}+{self.virtual_y}")
+
+        self.canvas = tk.Canvas(self, bg="black", cursor="crosshair", highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.create_text(
+            24,
+            24,
+            anchor="nw",
+            fill="white",
+            font=("Segoe UI", 16, "bold"),
+            text=self.prompt,
+        )
+        self.canvas.bind("<ButtonRelease-1>", self.on_release)
+        self.bind("<Escape>", lambda _event: self.cancel())
+        self.focus_force()
+
+    def on_release(self, event):
+        point = {"x": int(event.x + self.virtual_x), "y": int(event.y + self.virtual_y)}
+        self.destroy()
+        self.callback(point)
 
     def cancel(self):
         self.destroy()
@@ -1646,7 +1699,9 @@ class App(tk.Tk):
         controls = ttk.LabelFrame(parent, text="Einrichten", padding=12)
         controls.grid(row=1, column=0, sticky="ew", pady=(0, 12))
         controls.columnconfigure(0, weight=1)
-        ttk.Button(controls, text="Bereich waehlen", command=self.select_valorant_region).grid(row=0, column=0, sticky="ew")
+        controls.columnconfigure(1, weight=1)
+        ttk.Button(controls, text="Bereich waehlen", command=self.select_valorant_region).grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        ttk.Button(controls, text="Farbe waehlen", command=self.select_valorant_color).grid(row=0, column=1, sticky="ew")
 
         self.build_media_section(parent, 2, "valorant")
 
@@ -1994,10 +2049,19 @@ class App(tk.Tk):
         messagebox.showinfo(
             "Bereich waehlen",
             "Nach OK hast du 3 Sekunden, um Valorant sichtbar zu machen. Ziehe dann den Bereich, "
-            "in dem die rote Anzeige erscheinen soll.",
+            "der ueberwacht werden soll.",
         )
         self.withdraw()
         self.after(3000, lambda: self.open_region_selector("valorant"))
+
+    def select_valorant_color(self):
+        messagebox.showinfo(
+            "Farbe waehlen",
+            "Nach OK hast du 3 Sekunden, um Valorant sichtbar zu machen. Klicke dann direkt auf die rote Farbe, "
+            "die als tot erkannt werden soll.",
+        )
+        self.withdraw()
+        self.after(3000, self.open_valorant_color_selector)
 
     def select_lol_region(self):
         messagebox.showinfo(
@@ -2013,31 +2077,14 @@ class App(tk.Tk):
             prompt = "Bereich ziehen, in dem die LoL-Zahl erkannt werden soll. Esc bricht ab."
             RegionSelector(self, lambda region: self.region_selected("lol", region), prompt, "#2fb7d6")
         else:
-            prompt = "Bereich ziehen, in dem Rot erkannt werden soll. Esc bricht ab."
+            prompt = "Bereich ziehen, der fuer Valorant ueberwacht werden soll. Esc bricht ab."
             RegionSelector(self, lambda region: self.region_selected("valorant", region), prompt, "#ff4655")
 
-    def region_selected(self, game, region):
-        valorant_color_message = None
-        if region and game == "valorant":
-            try:
-                raw = capture_region(region["left"], region["top"], region["width"], region["height"])
-                target_rgb, target_pixels, total_pixels = find_dominant_red_color(raw, region["width"], region["height"])
-                if target_rgb:
-                    self.config_data["valorant_target_rgb"] = list(target_rgb)
-                    self.config_data["valorant_color_tolerance"] = 0
-                    self.config_data["red_difference"] = 0
-                    self.red_difference_var.set("0")
-                    valorant_color_message = (
-                        f"Farbe {format_rgb(target_rgb)} automatisch uebernommen "
-                        f"({target_pixels}/{total_pixels} Pixel, Toleranz 0)."
-                    )
-                else:
-                    valorant_color_message = (
-                        f"Keine rote Farbe im Bereich gefunden. Farbe bleibt {format_rgb(get_valorant_target_rgb(self.config_data))}."
-                    )
-            except Exception as exc:
-                valorant_color_message = f"Farbe konnte nicht automatisch gelesen werden: {exc}"
+    def open_valorant_color_selector(self):
+        prompt = "Auf die rote Valorant-Farbe klicken. Esc bricht ab."
+        ColorSelector(self, self.valorant_color_selected, prompt, "#ff4655")
 
+    def region_selected(self, game, region):
         self.deiconify()
         self.lift()
         if not region:
@@ -2049,13 +2096,44 @@ class App(tk.Tk):
             self.set_game_status("lol", log="Bereich gespeichert. Start druecken, dann wird eine Zahl in diesem Bereich erkannt.")
         else:
             self.config_data["region"] = region
-            message = "Bereich gespeichert."
-            if valorant_color_message:
-                message = f"{message} {valorant_color_message}"
-            message = f"{message} Start druecken, dann wird diese Farbe in diesem Bereich erkannt."
-            self.set_game_status("valorant", log=message)
+            self.set_game_status("valorant", log="Bereich gespeichert. Farbe separat waehlen oder Start druecken.")
 
         save_config(self.config_data)
+        self.refresh_labels()
+
+    def valorant_color_selected(self, point):
+        if not point:
+            self.deiconify()
+            self.lift()
+            self.set_game_status("valorant", log="Farbauswahl abgebrochen.")
+            return
+
+        self.after(140, lambda selected_point=point: self.apply_valorant_color_selection(selected_point))
+
+    def apply_valorant_color_selection(self, point):
+        try:
+            target_rgb, target_pixels, total_pixels = capture_color_sample_at_point(point["x"], point["y"])
+            if not target_rgb:
+                message = (
+                    f"Keine rote Farbe am Klickpunkt gefunden. Farbe bleibt "
+                    f"{format_rgb(get_valorant_target_rgb(self.config_data))}."
+                )
+            else:
+                self.config_data["valorant_target_rgb"] = list(target_rgb)
+                self.config_data["valorant_color_tolerance"] = 0
+                self.config_data["red_difference"] = 0
+                self.red_difference_var.set("0")
+                save_config(self.config_data)
+                message = (
+                    f"Farbe {format_rgb(target_rgb)} gespeichert "
+                    f"({target_pixels}/{total_pixels} Pixel, Toleranz 0)."
+                )
+        except Exception as exc:
+            message = f"Farbe konnte nicht gelesen werden: {exc}"
+
+        self.deiconify()
+        self.lift()
+        self.set_game_status("valorant", log=message)
         self.refresh_labels()
 
     def sync_valorant_settings(self):
